@@ -1,4 +1,7 @@
-add_executable( ${NODE_EXECUTABLE_NAME} main.cpp )
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../shadow/cmake")
+include(ShadowTools) 
+
+add_shadow_plugin( ${NODE_EXECUTABLE_NAME} main.cpp )
 
 if( UNIX AND NOT APPLE )
   set(rt_library rt )
