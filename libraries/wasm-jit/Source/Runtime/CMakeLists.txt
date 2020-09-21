@@ -14,7 +14,7 @@ set(PublicHeaders
 	${WAVM_INCLUDE_DIR}/Runtime/TaggedValue.h)
 include_directories(${WAVM_INCLUDE_DIR}/Runtime)
 
-add_library(Runtime STATIC ${Sources} ${PublicHeaders})
+add_library(Runtime SHARED ${Sources} ${PublicHeaders})
 
 add_definitions(-DRUNTIME_API=DLL_EXPORT)
 

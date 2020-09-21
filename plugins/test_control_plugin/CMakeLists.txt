@@ -1,6 +1,6 @@
 file(GLOB HEADERS "include/eosio/test_control_plugin/*.hpp")
 
-add_library( test_control_plugin
+add_library( test_control_plugin SHARED
              test_control_plugin.cpp
              ${HEADERS} )
 

@@ -17,7 +17,10 @@ set(PublicHeaders
 	${WAVM_INCLUDE_DIR}/WAST/TestScript.h)
 include_directories(${WAVM_INCLUDE_DIR}/WAST)
 
-add_library(WAST STATIC ${Sources} ${PublicHeaders})
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../shadow/cmake")
+include(ShadowTools) 
+
+add_shadow_plugin(WAST SHARED ${Sources} ${PublicHeaders})
 add_definitions(-DWAST_API=DLL_EXPORT)
 target_link_libraries(WAST Logging IR WASM)
 install(TARGETS WAST 

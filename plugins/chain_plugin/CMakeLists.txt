@@ -1,5 +1,7 @@
 file(GLOB HEADERS "include/eosio/chain_plugin/*.hpp")
 add_library( chain_plugin
+            SHARED
+             account_query_db.cpp
              chain_plugin.cpp
              ${HEADERS} )
 

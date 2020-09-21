@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
-#include <fc/reflect/reflect.hpp>
 #include <iosfwd>
+#include <fc/reflect/reflect.hpp>
 
 namespace eosio::chain {
   struct name;

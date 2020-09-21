@@ -67,8 +67,11 @@ using boost::signals2::scoped_connection;
 const fc::string logger_name("producer_plugin");
 fc::logger _log;
 
-const fc::string trx_trace_logger_name("transaction_tracing");
-fc::logger _trx_trace_log;
+const fc::string trx_successful_trace_logger_name("transaction_tracing");
+fc::logger       _trx_successful_trace_log;
+
+const fc::string trx_failed_trace_logger_name("transaction_failure_tracing");
+fc::logger       _trx_failed_trace_log;
 
 namespace eosio {
 
@@ -461,17 +464,28 @@ class producer_plugin_impl : public std::enable_shared_from_this<producer_plugin
 
          auto future = transaction_metadata::start_recover_keys( trx, _thread_pool->get_executor(),
                 chain.get_chain_id(), fc::microseconds( max_trx_cpu_usage ), chain.configured_subjective_signature_length_limit() );
-         boost::asio::post( _thread_pool->get_executor(), [self = this, future{std::move(future)}, persist_until_expired, next{std::move(next)}]() mutable {
+
+         auto trx_id = trx->id();
+         boost::asio::post(_thread_pool->get_executor(), [self = this, future{std::move(future)}, persist_until_expired,
+                                                          next{std::move(next)}, trx_id]() mutable {
             if( future.valid() ) {
                future.wait();
-               app().post( priority::low, [self, future{std::move(future)}, persist_until_expired, next{std::move( next )}]() mutable {
+               app().post( priority::low, [self, future{std::move(future)}, persist_until_expired, next{std::move( next )}, trx_id]() mutable {
+                  auto exception_handler = [&next, trx_id](fc::exception_ptr ex) {
+                     fc_dlog(_trx_successful_trace_log, "[TRX_TRACE] Speculative execution is REJECTING tx: ${txid} : ${why} ",
+                            ("txid", trx_id)("why",ex->what()));
+                     fc_dlog(_trx_failed_trace_log, "[TRX_TRACE] Speculative execution is REJECTING tx: ${txid} : ${why} ",
+                            ("txid", trx_id)("why",ex->what()));
+                     next(ex);
+                  };
                   try {
-                     if( !self->process_incoming_transaction_async( future.get(), persist_until_expired, std::move( next ) ) ) {
+                     auto result = future.get();
+                     if( !self->process_incoming_transaction_async( result, persist_until_expired, next ) ) {
                         if( self->_pending_block_mode == pending_block_mode::producing ) {
                            self->schedule_maybe_produce_block( true );
                         }
                      }
-                  } CATCH_AND_CALL(next);
+                  } CATCH_AND_CALL(exception_handler);
                } );
             }
          });
@@ -486,25 +500,33 @@ class producer_plugin_impl : public std::enable_shared_from_this<producer_plugin
             if (response.contains<fc::exception_ptr>()) {
                _transaction_ack_channel.publish(priority::low, std::pair<fc::exception_ptr, transaction_metadata_ptr>(response.get<fc::exception_ptr>(), trx));
                if (_pending_block_mode == pending_block_mode::producing) {
-                  fc_dlog(_trx_trace_log, "[TRX_TRACE] Block ${block_num} for producer ${prod} is REJECTING tx: ${txid} : ${why} ",
+                  fc_dlog(_trx_successful_trace_log, "[TRX_TRACE] Block ${block_num} for producer ${prod} is REJECTING tx: ${txid} : ${why} ",
                         ("block_num", chain.head_block_num() + 1)
-                        ("prod", chain.pending_block_producer())
+                        ("prod", get_pending_block_producer())
+                        ("txid", trx->id())
+                        ("why",response.get<fc::exception_ptr>()->what()));
+                  fc_dlog(_trx_failed_trace_log, "[TRX_TRACE] Block ${block_num} for producer ${prod} is REJECTING tx: ${txid} : ${why} ",
+                        ("block_num", chain.head_block_num() + 1)
+                        ("prod", get_pending_block_producer())
                         ("txid", trx->id())
                         ("why",response.get<fc::exception_ptr>()->what()));
                } else {
-                  fc_dlog(_trx_trace_log, "[TRX_TRACE] Speculative execution is REJECTING tx: ${txid} : ${why} ",
+                  fc_dlog(_trx_successful_trace_log, "[TRX_TRACE] Speculative execution is REJECTING tx: ${txid} : ${why} ",
+                          ("txid", trx->id())
+                          ("why",response.get<fc::exception_ptr>()->what()));
+                  fc_dlog(_trx_failed_trace_log, "[TRX_TRACE] Speculative execution is REJECTING tx: ${txid} : ${why} ",
                           ("txid", trx->id())
                           ("why",response.get<fc::exception_ptr>()->what()));
                }
             } else {
                _transaction_ack_channel.publish(priority::low, std::pair<fc::exception_ptr, transaction_metadata_ptr>(nullptr, trx));
                if (_pending_block_mode == pending_block_mode::producing) {
-                  fc_dlog(_trx_trace_log, "[TRX_TRACE] Block ${block_num} for producer ${prod} is ACCEPTING tx: ${txid}",
+                  fc_dlog(_trx_successful_trace_log, "[TRX_TRACE] Block ${block_num} for producer ${prod} is ACCEPTING tx: ${txid}",
                           ("block_num", chain.head_block_num() + 1)
-                          ("prod", chain.pending_block_producer())
+                          ("prod", get_pending_block_producer())
                           ("txid", trx->id()));
                } else {
-                  fc_dlog(_trx_trace_log, "[TRX_TRACE] Speculative execution is ACCEPTING tx: ${txid}",
+                  fc_dlog(_trx_successful_trace_log, "[TRX_TRACE] Speculative execution is ACCEPTING tx: ${txid}",
                           ("txid", trx->id()));
                }
             }
@@ -547,12 +569,12 @@ class producer_plugin_impl : public std::enable_shared_from_this<producer_plugin
                if( exception_is_exhausted( *trace->except, deadline_is_subjective )) {
                   _pending_incoming_transactions.add( trx, persist_until_expired, next );
                   if( _pending_block_mode == pending_block_mode::producing ) {
-                     fc_dlog( _trx_trace_log, "[TRX_TRACE] Block ${block_num} for producer ${prod} COULD NOT FIT, tx: ${txid} RETRYING ",
+                     fc_dlog(_log, "[TRX_TRACE] Block ${block_num} for producer ${prod} COULD NOT FIT, tx: ${txid} RETRYING ",
                               ("block_num", chain.head_block_num() + 1)
-                              ("prod", chain.pending_block_producer())
+                              ("prod", get_pending_block_producer())
                               ("txid", trx->id()));
                   } else {
-                     fc_dlog( _trx_trace_log, "[TRX_TRACE] Speculative execution COULD NOT FIT tx: ${txid} RETRYING",
+                     fc_dlog(_log, "[TRX_TRACE] Speculative execution COULD NOT FIT tx: ${txid} RETRYING",
                               ("txid", trx->id()));
                   }
                   if( !exhausted )
@@ -588,6 +610,15 @@ class producer_plugin_impl : public std::enable_shared_from_this<producer_plugin
             return fc::microseconds(0);
          } else {
             return now - _irreversible_block_time;
+         }
+      }
+
+      account_name get_pending_block_producer() {
+         auto& chain = chain_plug->chain();
+         if (chain.is_building_block()) {
+            return chain.pending_block_producer();
+         } else {
+            return {};
          }
       }
 
@@ -953,6 +984,9 @@ void producer_plugin::plugin_startup()
    EOS_ASSERT( my->_producers.empty() || chain.get_validation_mode() == chain::validation_mode::FULL, plugin_config_exception,
               "node cannot have any producer-name configured because block production is not safe when validation_mode is not \"full\"" );
 
+   EOS_ASSERT( my->_producers.empty() || my->chain_plug->accept_transactions(), plugin_config_exception,
+              "node cannot have any producer-name configured because no block production is possible with no [api|p2p]-accepted-transactions" );
+
    my->_accepted_block_connection.emplace(chain.accepted_block.connect( [this]( const auto& bsp ){ my->on_block( bsp ); } ));
    my->_accepted_block_header_connection.emplace(chain.accepted_block_header.connect( [this]( const auto& bsp ){ my->on_block_header( bsp ); } ));
    my->_irreversible_block_connection.emplace(chain.irreversible_block.connect( [this]( const auto& bsp ){ my->on_irreversible_block( bsp->block ); } ));
@@ -1001,10 +1035,12 @@ void producer_plugin::plugin_shutdown() {
 
 void producer_plugin::handle_sighup() {
    fc::logger::update( logger_name, _log );
-   fc::logger::update( trx_trace_logger_name, _trx_trace_log );
+   fc::logger::update(trx_successful_trace_logger_name, _trx_successful_trace_log);
+   fc::logger::update(trx_failed_trace_logger_name, _trx_failed_trace_log);
 }
 
 void producer_plugin::pause() {
+   fc_ilog(_log, "Producer paused.");
    my->_pause_production = true;
 }
 
@@ -1016,7 +1052,10 @@ void producer_plugin::resume() {
    if (my->_pending_block_mode == pending_block_mode::speculating) {
       chain::controller& chain = my->chain_plug->chain();
       my->_unapplied_transactions.add_aborted( chain.abort_block() );
+      fc_ilog(_log, "Producer resumed. Scheduling production.");
       my->schedule_production_loop();
+   } else {
+      fc_ilog(_log, "Producer resumed.");
    }
 }
 
@@ -1415,7 +1454,7 @@ fc::time_point producer_plugin_impl::calculate_block_deadline( const fc::time_po
 producer_plugin_impl::start_block_result producer_plugin_impl::start_block() {
    chain::controller& chain = chain_plug->chain();
 
-   if( chain.in_immutable_mode() )
+   if( !chain_plug->accept_transactions() )
       return start_block_result::waiting_for_block;
 
    const auto& hbs = chain.head_block_state();
@@ -1634,16 +1673,25 @@ bool producer_plugin_impl::remove_expired_persisted_trxs( const fc::time_point& 
                    &chain, has_producers = !_producers.empty()]( const transaction_id_type& txid, trx_enum_type trx_type ) {
             if( trx_type == trx_enum_type::persisted ) {
                if( pbm == pending_block_mode::producing ) {
-                  fc_dlog( _trx_trace_log,
+                  fc_dlog(_trx_successful_trace_log,
                            "[TRX_TRACE] Block ${block_num} for producer ${prod} is EXPIRING PERSISTED tx: ${txid}",
-                           ("block_num", chain.head_block_num() + 1)("prod", chain.pending_block_producer())("txid", txid));
+                           ("block_num", chain.head_block_num() + 1)("txid", txid)
+                           ("prod", chain.is_building_block() ? chain.pending_block_producer() : name()) );
+                  fc_dlog(_trx_failed_trace_log,
+                           "[TRX_TRACE] Block ${block_num} for producer ${prod} is EXPIRING PERSISTED tx: ${txid}",
+                           ("block_num", chain.head_block_num() + 1)("txid", txid)
+                           ("prod", chain.is_building_block() ? chain.pending_block_producer() : name()) );
                } else {
-                  fc_dlog( _trx_trace_log, "[TRX_TRACE] Speculative execution is EXPIRING PERSISTED tx: ${txid}", ("txid", txid));
+                  fc_dlog(_trx_successful_trace_log, "[TRX_TRACE] Speculative execution is EXPIRING PERSISTED tx: ${txid}", ("txid", txid));
+                  fc_dlog(_trx_failed_trace_log, "[TRX_TRACE] Speculative execution is EXPIRING PERSISTED tx: ${txid}", ("txid", txid));
                }
                ++num_expired_persistent;
             } else {
                if (has_producers) {
-                  fc_dlog(_trx_trace_log,
+                  fc_dlog(_trx_successful_trace_log,
+                        "[TRX_TRACE] Node with producers configured is dropping an EXPIRED transaction that was PREVIOUSLY ACCEPTED : ${txid}",
+                        ("txid", txid));
+                  fc_dlog(_trx_failed_trace_log,
                         "[TRX_TRACE] Node with producers configured is dropping an EXPIRED transaction that was PREVIOUSLY ACCEPTED : ${txid}",
                         ("txid", txid));
                }
@@ -1669,12 +1717,14 @@ bool producer_plugin_impl::remove_expired_blacklisted_trxs( const fc::time_point
 {
    bool exhausted = false;
    auto& blacklist_by_expiry = _blacklisted_transactions.get<by_expiry>();
-   auto now = fc::time_point::now();
    if(!blacklist_by_expiry.empty()) {
+      const chain::controller& chain = chain_plug->chain();
+      const auto lib_time = chain.last_irreversible_block_time();
+
       int num_expired = 0;
       int orig_count = _blacklisted_transactions.size();
 
-      while (!blacklist_by_expiry.empty() && blacklist_by_expiry.begin()->expiry <= now) {
+      while (!blacklist_by_expiry.empty() && blacklist_by_expiry.begin()->expiry <= lib_time) {
          if (deadline <= fc::time_point::now()) {
             exhausted = true;
             break;
@@ -1772,12 +1822,13 @@ void producer_plugin_impl::process_scheduled_and_incoming_trxs( const fc::time_p
          continue; // do not allow schedule and execute in same block
       }
 
-      const transaction_id_type trx_id = sch_itr->trx_id; // make copy since reference could be invalidated
-      if (blacklist_by_id.find(trx_id) != blacklist_by_id.end()) {
+      if (blacklist_by_id.find(sch_itr->trx_id) != blacklist_by_id.end()) {
          ++sch_itr;
          continue;
       }
 
+      const transaction_id_type trx_id = sch_itr->trx_id; // make copy since reference could be invalidated
+      const auto sch_expiration = sch_itr->expiration;
       auto sch_itr_next = sch_itr; // save off next since sch_itr may be invalidated by loop
       ++sch_itr_next;
       const auto next_delay_until = sch_itr_next != sch_idx.end() ? sch_itr_next->delay_until : sch_itr->delay_until;
@@ -1822,9 +1873,8 @@ void producer_plugin_impl::process_scheduled_and_incoming_trxs( const fc::time_p
                   break;
                }
             } else {
-               auto expiration = fc::time_point::now() + fc::seconds(chain.get_global_properties().configuration.deferred_trx_expiration_window);
                // this failed our configured maximum transaction time, we don't want to replay it add it to a blacklist
-               _blacklisted_transactions.insert(transaction_id_with_expiry{trx_id, expiration});
+               _blacklisted_transactions.insert(transaction_id_with_expiry{trx_id, sch_expiration});
                num_failed++;
             }
          } else {
@@ -2083,6 +2133,11 @@ void producer_plugin_impl::produce_block() {
         ("n",new_bs->block_num)("t",new_bs->header.timestamp)
         ("count",new_bs->block->transactions.size())("lib",chain.last_irreversible_block_num())("confs", new_bs->header.confirmed));
 
+}
+
+void producer_plugin::log_failed_transaction(const transaction_id_type& trx_id, const char* reason) const {
+   fc_dlog(_trx_failed_trace_log, "[TRX_TRACE] Speculative execution is REJECTING tx: ${txid} : ${why}",
+           ("trxid", trx_id)("reason", reason));
 }
 
 } // namespace eosio

@@ -20,7 +20,10 @@ set ( builtins_sources
 
 file ( GLOB builtins_headers "${CMAKE_CURRENT_SOURCE_DIR}*.h" )
 list( APPEND builtins_sources ${builtins_headers} )
-add_library ( builtins STATIC ${builtins_sources} )
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../shadow/cmake")
+include(ShadowTools) 
+
+add_shadow_plugin ( builtins  ${builtins_sources} )
 target_include_directories( builtins PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                                             "${CMAKE_CURRENT_SOURCE_DIR}../softfloat/source/include" )
 

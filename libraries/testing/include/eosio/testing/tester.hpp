@@ -152,7 +152,7 @@ namespace eosio { namespace testing {
 
          virtual ~base_tester() {};
 
-         void              init(const setup_policy policy = setup_policy::full, db_read_mode read_mode = db_read_mode::SPECULATIVE);
+         void              init(const setup_policy policy = setup_policy::full, db_read_mode read_mode = db_read_mode::SPECULATIVE, optional<uint32_t> genesis_max_inline_action_size = optional<uint32_t>{}, optional<uint32_t> config_max_nonprivileged_inline_action_size = optional<uint32_t>{});
          void              init(controller::config config, const snapshot_reader_ptr& snapshot);
          void              init(controller::config config, const genesis_state& genesis);
          void              init(controller::config config);
@@ -175,6 +175,8 @@ namespace eosio { namespace testing {
          virtual signed_block_ptr produce_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms) ) = 0;
          virtual signed_block_ptr produce_empty_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms) ) = 0;
          virtual signed_block_ptr finish_block() = 0;
+         // produce one block and return traces for all applied transactions, both failed and executed
+         signed_block_ptr     produce_block( std::vector<transaction_trace_ptr>& traces );
          void                 produce_blocks( uint32_t n = 1, bool empty = false );
          void                 produce_blocks_until_end_of_round();
          void                 produce_blocks_for_n_rounds(const uint32_t num_of_rounds = 1);
@@ -338,7 +340,7 @@ namespace eosio { namespace testing {
                   const auto& accnt = control->db().get<account_object, by_name>( name );
                   abi_def abi;
                   if( abi_serializer::to_abi( accnt.abi, abi )) {
-                     return abi_serializer( abi, abi_serializer_max_time );
+                     return abi_serializer( abi, abi_serializer::create_yield_function( abi_serializer_max_time ) );
                   }
                   return optional<abi_serializer>();
                } FC_RETHROW_EXCEPTIONS( error, "Failed to find or parse ABI for ${name}", ("name", name))
@@ -388,7 +390,7 @@ namespace eosio { namespace testing {
             return genesis;
          }
 
-         static std::pair<controller::config, genesis_state> default_config(const fc::temp_directory& tempdir) {
+         static std::pair<controller::config, genesis_state> default_config(const fc::temp_directory& tempdir, optional<uint32_t> genesis_max_inline_action_size = optional<uint32_t>{}, optional<uint32_t> config_max_nonprivileged_inline_action_size = optional<uint32_t>{}) {
             controller::config cfg;
             cfg.blocks_dir      = tempdir.path() / config::default_blocks_dir_name;
             cfg.state_dir  = tempdir.path() / config::default_state_dir_name;
@@ -409,11 +411,21 @@ namespace eosio { namespace testing {
                else if(boost::unit_test::framework::master_test_suite().argv[i] == std::string("--eos-vm-oc"))
                   cfg.wasm_runtime = chain::wasm_interface::vm_type::eos_vm_oc;
             }
-            return {cfg, default_genesis()};
+            auto gen = default_genesis();
+            if (genesis_max_inline_action_size) {
+               gen.initial_configuration.max_inline_action_size = *genesis_max_inline_action_size;
+            }
+            if (config_max_nonprivileged_inline_action_size) {
+               cfg.max_nonprivileged_inline_action_size = *config_max_nonprivileged_inline_action_size;
+            }
+            return {cfg, gen};
          }
 
       protected:
-         signed_block_ptr _produce_block( fc::microseconds skip_time, bool skip_pending_trxs = false );
+         signed_block_ptr _produce_block( fc::microseconds skip_time, bool skip_pending_trxs );
+         signed_block_ptr _produce_block( fc::microseconds skip_time, bool skip_pending_trxs,
+                                          bool no_throw, std::vector<transaction_trace_ptr>& traces );
+
          void             _start_block(fc::time_point block_time);
          signed_block_ptr _finish_block();
 
@@ -436,8 +448,8 @@ namespace eosio { namespace testing {
 
    class tester : public base_tester {
    public:
-      tester(setup_policy policy = setup_policy::full, db_read_mode read_mode = db_read_mode::SPECULATIVE) {
-         init(policy, read_mode);
+      tester(setup_policy policy = setup_policy::full, db_read_mode read_mode = db_read_mode::SPECULATIVE, optional<uint32_t> genesis_max_inline_action_size = optional<uint32_t>{}, optional<uint32_t> config_max_nonprivileged_inline_action_size = optional<uint32_t>{}) {
+         init(policy, read_mode, genesis_max_inline_action_size, config_max_nonprivileged_inline_action_size);
       }
 
       tester(controller::config config, const genesis_state& genesis) {
@@ -477,6 +489,8 @@ namespace eosio { namespace testing {
             init(cfg);
          }
       }
+
+      using base_tester::produce_block;
 
       signed_block_ptr produce_block( fc::microseconds skip_time = fc::milliseconds(config::block_interval_ms) )override {
          return _produce_block(skip_time, false);

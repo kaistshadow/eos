@@ -11,6 +11,7 @@ else()
    try_run(POSIX_TIMER_TEST_RUN_RESULT POSIX_TIMER_TEST_COMPILE_RESULT ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/platform_timer_posix_test.c)
    if(POSIX_TIMER_TEST_RUN_RESULT EQUAL 0)
       set(PLATFORM_TIMER_IMPL platform_timer_posix.cpp)
+      set(CHAIN_RT_LINKAGE rt)
    else()
       set(PLATFORM_TIMER_IMPL platform_timer_asio_fallback.cpp)
    endif()
@@ -47,9 +48,10 @@ if("eos-vm" IN_LIST EOSIO_WASM_RUNTIMES OR "eos-vm-jit" IN_LIST EOSIO_WASM_RUNTI
    set(CHAIN_EOSVM_SOURCES "webassembly/eos-vm.cpp")
    set(CHAIN_EOSVM_LIBRARIES eos-vm)
 endif()
-
+list(APPEND CMAKE_MODULE_PATH "/home/mong/CLionProjects/blockchain-sim/shadow/cmake") # Path for ShadowTool Module
+include(ShadowTools) # load ShadowTools Module
 ## SORT .cpp by most likely to change / break compile
-add_library( eosio_chain
+add_library( eosio_chain SHARED
              merkle.cpp
              name.cpp
              transaction.cpp
@@ -105,7 +107,7 @@ add_library( eosio_chain
              )
 
 target_link_libraries( eosio_chain fc chainbase Logging IR WAST WASM Runtime
-                       softfloat builtins wabt ${CHAIN_EOSVM_LIBRARIES} ${LLVM_LIBS}
+                       softfloat builtins wabt ${CHAIN_EOSVM_LIBRARIES} ${LLVM_LIBS} ${CHAIN_RT_LINKAGE}
                      )
 target_include_directories( eosio_chain
                             PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/include"

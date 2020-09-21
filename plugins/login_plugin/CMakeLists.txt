@@ -1,5 +1,5 @@
 file(GLOB HEADERS "include/eosio/login_plugin/*.hpp")
-add_library( login_plugin
+add_library( login_plugin SHARED
              login_plugin.cpp
              ${HEADERS} )
 
