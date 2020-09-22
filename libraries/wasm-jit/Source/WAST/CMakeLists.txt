@@ -17,7 +17,7 @@ set(PublicHeaders
 	${WAVM_INCLUDE_DIR}/WAST/TestScript.h)
 include_directories(${WAVM_INCLUDE_DIR}/WAST)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../shadow/cmake")
+list(APPEND CMAKE_MODULE_PATH "/home/mong/CLionProjects/blockchain-sim/shadow/cmake")
 include(ShadowTools) 
 
 add_shadow_plugin(WAST SHARED ${Sources} ${PublicHeaders})

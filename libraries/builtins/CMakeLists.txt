@@ -20,7 +20,7 @@ set ( builtins_sources
 
 file ( GLOB builtins_headers "${CMAKE_CURRENT_SOURCE_DIR}*.h" )
 list( APPEND builtins_sources ${builtins_headers} )
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../shadow/cmake")
+list(APPEND CMAKE_MODULE_PATH "/home/mong/CLionProjects/blockchain-sim/shadow/cmake")
 include(ShadowTools) 
 
 add_shadow_plugin ( builtins  ${builtins_sources} )
