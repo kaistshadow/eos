@@ -218,6 +218,7 @@ endif ()
 
 add_custom_target(everything)
 
+
 add_library(wabt SHARED
   src/token.cc
   src/opcode.cc

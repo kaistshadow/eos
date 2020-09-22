@@ -48,7 +48,6 @@ if("eos-vm" IN_LIST EOSIO_WASM_RUNTIMES OR "eos-vm-jit" IN_LIST EOSIO_WASM_RUNTI
    set(CHAIN_EOSVM_SOURCES "webassembly/eos-vm.cpp")
    set(CHAIN_EOSVM_LIBRARIES eos-vm)
 endif()
-## SORT .cpp by most likely to change / break compile
 add_library( eosio_chain SHARED
              merkle.cpp
              name.cpp

@@ -1,6 +1,7 @@
 file(GLOB HEADERS "include/eosio/testing/*.hpp")
 
 ## SORT .cpp by most likely to change / break compile
+
 add_library( eosio_testing SHARED
              tester.cpp
              tester_network.cpp
