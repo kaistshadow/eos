@@ -121,8 +121,6 @@ set( sources
 list(APPEND sources ${fc_headers})
 
 # setup_library( fc SOURCES ${sources} LIBRARY_TYPE SHARED DONT_INSTALL_LIBRARY )
-list(APPEND CMAKE_MODULE_PATH "/home/mong/CLionProjects/blockchain-sim/shadow/cmake")
-include(ShadowTools) 
 
 add_library(fc SHARED ${sources})
 

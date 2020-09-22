@@ -218,9 +218,6 @@ endif ()
 
 add_custom_target(everything)
 
-list(APPEND CMAKE_MODULE_PATH "/home/mong/CLionProjects/blockchain-sim/shadow/cmake")
-include(ShadowTools) 
-
 add_library(wabt SHARED
   src/token.cc
   src/opcode.cc

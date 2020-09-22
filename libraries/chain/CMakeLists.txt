@@ -48,8 +48,6 @@ if("eos-vm" IN_LIST EOSIO_WASM_RUNTIMES OR "eos-vm-jit" IN_LIST EOSIO_WASM_RUNTI
    set(CHAIN_EOSVM_SOURCES "webassembly/eos-vm.cpp")
    set(CHAIN_EOSVM_LIBRARIES eos-vm)
 endif()
-list(APPEND CMAKE_MODULE_PATH "/home/mong/CLionProjects/blockchain-sim/shadow/cmake") # Path for ShadowTool Module
-include(ShadowTools) # load ShadowTools Module
 ## SORT .cpp by most likely to change / break compile
 add_library( eosio_chain SHARED
              merkle.cpp

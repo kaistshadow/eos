@@ -3,10 +3,7 @@ project(secp256k1)
 
 find_package(GMP REQUIRED)
 
-list(APPEND CMAKE_MODULE_PATH "/home/mong/CLionProjects/blockchain-sim/shadow/cmake")
-include(ShadowTools) 
-
-add_shadow_plugin(secp256k1 
+add_library(secp256k1 SHARED
   upstream/src/secp256k1.c
 )
 

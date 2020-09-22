@@ -10,10 +10,8 @@ set(_VERSION_HASH_   "")
 set(_VERSION_DIRTY_  "")
 
 # Construct the library target.
-list(APPEND CMAKE_MODULE_PATH "/home/mong/CLionProjects/blockchain-sim/shadow/cmake")
-include(ShadowTools) 
 
-add_shadow_plugin(
+add_library(
    version SHARED
    "${CMAKE_CURRENT_SOURCE_DIR}/src/version.cpp"
    "${CMAKE_CURRENT_BINARY_DIR}/src/version_impl.cpp")

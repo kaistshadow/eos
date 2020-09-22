@@ -1,10 +1,7 @@
 file(GLOB HEADERS "include/eosio/testing/*.hpp")
 
 ## SORT .cpp by most likely to change / break compile
-list(APPEND CMAKE_MODULE_PATH "/home/mong/CLionProjects/blockchain-sim/shadow/cmake")
-include(ShadowTools) 
-
-add_shadow_plugin( eosio_testing
+add_library( eosio_testing SHARED
              tester.cpp
              tester_network.cpp
              ${HEADERS}
