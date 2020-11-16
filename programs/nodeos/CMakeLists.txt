@@ -115,9 +115,9 @@ include(additionalPlugins)
 copy_bin( ${NODE_EXECUTABLE_NAME} )
 
 ## Add logic for "nodeos" file copy by VICTOR
-set_property(TARGET ${NODE_EXECUTABLE_NAME}
-        PROPERTY
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../tests/regtest/shadow-eos/bin")
+#set_property(TARGET ${NODE_EXECUTABLE_NAME}
+#        PROPERTY
+#        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../tests/regtest/shadow-eos/bin")
 ## Add logic for ".SO" file creation by VICTOR
 MESSAGE(STATUS "CMAKE_INSTALL_PREFIX = ${CMAKE_INSTALL_PREFIX}")
 set_property(TARGET "${NODE_SO_NAME}"
